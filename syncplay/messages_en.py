@@ -494,6 +494,7 @@ en = {
     "server-rooms-argument": "path to database file to use and/or create to store persistent room data. Enables rooms to persist without watchers and through restarts",
     "server-permanent-rooms-argument": "path to file which lists permanent rooms that will be listed even if the room is empty (in the form of a text file which lists one room per line) - requires persistent rooms to be enabled",
     "server-chat-argument": "Should chat be disabled?",
+    "spoof-filenames": "pretend other users filename is the same if duration of the file matches",
     "server-chat-maxchars-argument": "Maximum number of characters in a chat message (default is {})", # Default number of characters
     "server-maxusernamelength-argument": "Maximum number of characters in a username (default is {})",
     "server-stats-db-file-argument": "Enable server stats using the SQLite db file provided",

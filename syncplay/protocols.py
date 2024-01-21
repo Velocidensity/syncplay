@@ -630,14 +630,15 @@ class SyncServerProtocol(JSONCommandProtocol):
             user[username]["event"] = event
         self.sendSet({"user": user})
 
-    def _addUserOnList(self, userlist, watcher):
+    def _addUserOnList(self, userlist, watcher, target):
         room = watcher.getRoom()
         if room:
             if room.getName() not in userlist:
                 userlist[room.getName()] = {}
+            filedata = watcher.getRenamedFile(target) if self._factory.spoofFilenames else watcher.getFile()
             userFile = {
                 "position": 0,
-                "file": watcher.getFile() if watcher.getFile() else {},
+                "file": filedata if filedata else {},
                 "controller": watcher.isController(),
                 "isReady": watcher.isReady(),
                 "features": watcher.getFeatures()
@@ -661,7 +662,7 @@ class SyncServerProtocol(JSONCommandProtocol):
         watchers = self._factory.getAllWatchersForUser(self._watcher)
         dummyCount = 0
         for watcher in watchers:
-            self._addUserOnList(userlist, watcher)
+            self._addUserOnList(userlist, watcher, self._watcher)
         if self._watcher.isGUIUser(self.getFeatures()):
             for emptyRoom in self._factory.getEmptyPersistentRooms():
                 dummyCount += 1

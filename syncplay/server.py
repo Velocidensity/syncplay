@@ -24,7 +24,7 @@ from syncplay.utils import RoomPasswordProvider, NotControlledRoom, RandomString
 
 class SyncFactory(Factory):
     def __init__(self, port='', password='', motdFilePath=None, roomsDbFile=None, permanentRoomsFile=None, isolateRooms=False, salt=None,
-                 disableReady=False, disableChat=False, maxChatMessageLength=constants.MAX_CHAT_MESSAGE_LENGTH,
+                 disableReady=False, disableChat=False, spoofFilenames=False, maxChatMessageLength=constants.MAX_CHAT_MESSAGE_LENGTH,
                  maxUsernameLength=constants.MAX_USERNAME_LENGTH, statsDbFile=None, tlsCertPath=None):
         self.isolateRooms = isolateRooms
         syncplay.messages.setLanguage(syncplay.messages.getInitialLanguage())
@@ -42,14 +42,15 @@ class SyncFactory(Factory):
         self.roomsDbFile = roomsDbFile
         self.disableReady = disableReady
         self.disableChat = disableChat
+        self.spoofFilenames = spoofFilenames
         self.maxChatMessageLength = maxChatMessageLength if maxChatMessageLength is not None else constants.MAX_CHAT_MESSAGE_LENGTH
         self.maxUsernameLength = maxUsernameLength if maxUsernameLength is not None else constants.MAX_USERNAME_LENGTH
         self.permanentRoomsFile = permanentRoomsFile if permanentRoomsFile is not None and os.path.isfile(permanentRoomsFile) else None
         self.permanentRooms = self.loadListFromMultilineTextFile(self.permanentRoomsFile) if self.permanentRoomsFile is not None else []
         if not isolateRooms:
-            self._roomManager = RoomManager(self.roomsDbFile, self.permanentRooms)
+            self._roomManager = RoomManager(self.roomsDbFile, self.permanentRooms, self.spoofFilenames)
         else:
-            self._roomManager = PublicRoomManager()
+            self._roomManager = PublicRoomManager(spoofFilenames=self.spoofFilenames)
         if statsDbFile is not None:
             self._statsDbHandle = StatsDBManager(statsDbFile)
             self._statsRecorder = StatsRecorder(self._statsDbHandle, self._roomManager)
@@ -172,9 +173,26 @@ class SyncFactory(Factory):
             self._roomManager.broadcast(watcher, l)
 
     def sendFileUpdate(self, watcher):
-        if watcher.getFile():
-            l = lambda w: w.sendSetting(watcher.getName(), watcher.getRoom(), watcher.getFile(), None)
-            self._roomManager.broadcast(watcher, l)
+        if not watcher.getFile():
+            return
+
+        for room in self._roomManager._rooms.values():
+            for receiver in room.getWatchers():
+                receiver.sendSetting(
+                    watcher.getName(),
+                    watcher.getRoom(),
+                    watcher.getRenamedFile(receiver) if self.spoofFilenames else watcher.getFile(),
+                    None
+                )
+
+        if not self.spoofFilenames:
+            return
+
+        for mate in watcher.getRoom().getWatchers():
+            if mate == watcher or mate.getFile() == mate.getRenamedFile(watcher):
+                continue
+
+            watcher.sendSetting(mate.getName(), mate.getRoom(), mate.getRenamedFile(watcher), None)
 
     def forcePositionUpdate(self, watcher, doSeek, watcherPauseState):
         room = watcher.getRoom()
@@ -393,10 +411,11 @@ class RoomDBManager(object):
         self._loadRoomsCallback(rooms)
 
 class RoomManager(object):
-    def __init__(self, roomsdbfile=None, permanentRooms=[]):
+    def __init__(self, roomsdbfile=None, permanentRooms=[], spoofFilenames=False):
         self._roomsDbFile = roomsdbfile
         self._rooms = {}
         self._permanentRooms = permanentRooms
+        self._spoofFilenames = spoofFilenames
         if self._roomsDbFile is not None:
             self._roomsDbHandle = RoomDBManager(self._roomsDbFile, self.loadRooms)
             self._roomsDbHandle.connect()
@@ -756,6 +775,15 @@ class Watcher(object):
     def getFile(self):
         return self._file
 
+    def getRenamedFile(self, watcher):
+        if watcher == self or not self._file:
+            return self._file
+
+        file_ = self._file.copy()
+        if watcher and watcher._file and file_['duration'] == watcher._file['duration']:
+            file_['name'] = watcher._file['name']
+        return file_
+
     def setPosition(self, position):
         self._position = position
 
@@ -881,6 +909,7 @@ class ConfigurationGetter(object):
         self._argparser.add_argument('--isolate-rooms', action='store_true', help=getMessage("server-isolate-room-argument"))
         self._argparser.add_argument('--disable-ready', action='store_true', help=getMessage("server-disable-ready-argument"))
         self._argparser.add_argument('--disable-chat', action='store_true', help=getMessage("server-chat-argument"))
+        self._argparser.add_argument('--spoof-filenames', action='store_true', help=getMessage("spoof-filenames"))
         self._argparser.add_argument('--salt', metavar='salt', type=str, nargs='?', help=getMessage("server-salt-argument"), default=os.environ.get('SYNCPLAY_SALT'))
         self._argparser.add_argument('--motd-file', metavar='file', type=str, nargs='?', help=getMessage("server-motd-argument"))
         self._argparser.add_argument('--rooms-db-file', metavar='rooms', type=str, nargs='?', help=getMessage("server-rooms-argument"))

@@ -49,6 +49,7 @@ def main():
         args.salt,
         args.disable_ready,
         args.disable_chat,
+        args.spoof_filenames,
         args.max_chat_message_length,
         args.max_username_length,
         args.stats_db_file,
